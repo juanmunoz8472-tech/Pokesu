@@ -1,0 +1,64 @@
+name: Build APK
+
+on:
+  push:
+    paths:
+      - 'PokeSurvivor.zip'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar proyecto
+        run: |
+          if [ -f PokeSurvivor.zip ]; then
+            unzip -q -o PokeSurvivor.zip
+            echo "PROJECT_DIR=PokeSurvivor" >> "$GITHUB_ENV"
+          else
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          fi
+
+      - name: Descargar el juego (codigo abierto MIT, version fija)
+        uses: actions/checkout@v4
+        with:
+          repository: JPTER78/pokesurvivor
+          ref: 537440510dcdadf8ed711ec3dea7ae795533a662
+          path: game-src
+          persist-credentials: false
+
+      - name: Copiar el juego dentro de la app
+        run: |
+          ASSETS="$PROJECT_DIR/app/src/main/assets/game"
+          rm -rf "$ASSETS"
+          mkdir -p "$ASSETS"
+          cp -a game-src/. "$ASSETS/"
+          cd "$ASSETS"
+          rm -rf .git .github docs tools functions cloudflare
+          rm -f .gitignore .firebaserc .nojekyll CNAME CLAUDE.md GDD.md dev.html \
+            firebase.json firestore.indexes.json firestore.rules database.rules.json \
+            sitemap.xml robots.txt
+          test -f index.html
+          du -sh .
+          find . -type f | wc -l
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Compilar APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PokeSurvivor-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          compression-level: 0
